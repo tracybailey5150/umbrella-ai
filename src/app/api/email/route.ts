@@ -6,6 +6,9 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SU
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json({ error: 'Email service is not configured (RESEND_API_KEY missing)' }, { status: 503 })
+    }
     const { orgId, leadId, to, subject, html, template } = await req.json()
     if (!to || !subject || !html) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 

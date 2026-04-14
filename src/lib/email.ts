@@ -1,6 +1,22 @@
 import { Resend } from 'resend'
 
-export const resend = new Resend(process.env.RESEND_API_KEY!)
+let _resend: Resend | null = null
+
+function getResend(): Resend {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not configured')
+  }
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY)
+  }
+  return _resend
+}
+
+export const resend = new Proxy({} as Resend, {
+  get(_, prop) {
+    return (getResend() as any)[prop]
+  },
+})
 
 const FROM = 'Umbrella AI <noreply@umbrella-ai.com>'
 

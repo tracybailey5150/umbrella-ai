@@ -6,6 +6,9 @@ import Stripe from 'stripe'
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 export async function POST(req: NextRequest) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json({ error: 'Stripe is not configured (STRIPE_SECRET_KEY missing)' }, { status: 503 })
+  }
   const body = await req.text()
   const sig = req.headers.get('stripe-signature')!
 

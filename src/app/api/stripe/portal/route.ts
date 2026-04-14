@@ -6,6 +6,9 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SU
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: 'Stripe is not configured (STRIPE_SECRET_KEY missing)' }, { status: 503 })
+    }
     const { orgId } = await req.json()
     const { data } = await admin.from('stripe_customers').select('stripe_customer_id').eq('org_id', orgId).single()
     if (!data?.stripe_customer_id) return NextResponse.json({ error: 'No billing account found' }, { status: 404 })

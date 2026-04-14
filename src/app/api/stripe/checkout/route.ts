@@ -6,6 +6,9 @@ const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SU
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: 'Stripe is not configured (STRIPE_SECRET_KEY missing)' }, { status: 503 })
+    }
     const { plan, orgId, userEmail } = await req.json()
     if (!plan || !orgId || !userEmail) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
