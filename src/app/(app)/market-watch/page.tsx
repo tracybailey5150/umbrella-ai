@@ -13,7 +13,7 @@ type Report = { id: string; title: string; report_type: string; content: string;
 type TrendAnalysis = { summary: string; opportunities: string[]; risks: string[]; recommendations: string[]; trend_direction: string; confidence_score: number }
 type CompetitorAnalysis = { overview: string; strengths: string[]; weaknesses: string[]; threats: string[]; opportunities: string[]; market_positioning: string; recommended_actions: string[] }
 
-const TABS = ['Dashboard', 'Trend Analysis', 'Competitor Watch', 'Alerts', 'Intelligence Reports']
+const TABS = ['Overview', 'Trends', 'Competitors', 'Keywords', 'Reports']
 const KEYWORD_CATEGORIES = ['Technology', 'Services', 'Real Estate', 'Equipment', 'Materials', 'General']
 const ALERT_TYPES = ['trend', 'competitor', 'keyword', 'market', 'custom']
 const SEVERITIES = ['info', 'warning', 'critical']
@@ -42,7 +42,7 @@ export default function MarketWatchPage() {
   // Competitor form
   const [compForm, setCompForm] = useState({ name: '', website: '', industry: '', tracking_keywords: '', notes: '' })
   // Keyword form
-  const [kwForm, setKwForm] = useState({ keyword: '', category: 'General' })
+  const [kwForm, setKwForm] = useState({ keyword: '', category: 'General', alert_enabled: false, alert_threshold: 70, alert_frequency: 'daily' })
   // Alert form
   const [alertForm, setAlertForm] = useState({ title: '', description: '', alert_type: 'custom', severity: 'info' })
 
@@ -118,7 +118,19 @@ export default function MarketWatchPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'keyword', keyword: kwForm.keyword, category: kwForm.category }),
     })
-    setKwForm({ keyword: '', category: 'General' })
+    // If alert monitoring is enabled, auto-create a keyword alert
+    if (kwForm.alert_enabled) {
+      await fetch('/api/market-watch/alerts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Monitoring: ${kwForm.keyword}`,
+          description: `Alert configured when trend score exceeds ${kwForm.alert_threshold}. Frequency: ${kwForm.alert_frequency}.`,
+          alert_type: 'keyword',
+          severity: 'info',
+        }),
+      })
+    }
+    setKwForm({ keyword: '', category: 'General', alert_enabled: false, alert_threshold: 70, alert_frequency: 'daily' })
     setShowKwForm(false)
     setSaving(false)
     load()
@@ -293,7 +305,7 @@ export default function MarketWatchPage() {
   /* ------------------------------------------------------------------ */
   /*  TAB 0 — Dashboard                                                 */
   /* ------------------------------------------------------------------ */
-  function DashboardTab() {
+  function OverviewTab() {
     return (
       <div>
         {/* KPI Cards */}
@@ -380,64 +392,71 @@ export default function MarketWatchPage() {
   /* ------------------------------------------------------------------ */
   /*  TAB 1 — Trend Analysis                                            */
   /* ------------------------------------------------------------------ */
-  function TrendAnalysisTab() {
+  function TrendsTab() {
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#64748B' }}>Category:</span>
-            {['all', ...KEYWORD_CATEGORIES].map(cat => (
-              <button key={cat} style={s.tab(kwCategoryFilter === cat)} onClick={() => setKwCategoryFilter(cat)}>
-                {cat === 'all' ? 'All' : cat}
-              </button>
-            ))}
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: '#F1F5F9' }}>Trend Signals</div>
+            <div style={{ fontSize: '12px', color: '#64748B' }}>Market signals with relevance scoring and AI analysis</div>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button style={s.btn(false)} onClick={analyzeTrends} disabled={analyzing}>
-              {analyzing ? 'Analyzing...' : 'Analyze Trends'}
+              {analyzing ? 'Analyzing...' : 'AI Trend Analysis'}
             </button>
-            <button style={s.btn()} onClick={() => setShowKwForm(true)}>+ Add Keyword</button>
+            <button style={s.btn()} onClick={() => setShowSignalForm(true)}>+ Add Signal</button>
           </div>
         </div>
 
-        {/* Keyword Table */}
+        {/* Trend Chart */}
+        <div style={{ ...s.card, marginBottom: '20px' }}>
+          <div style={s.cardTitle}>30-Day Trend Activity</div>
+          <TrendChart />
+        </div>
+
+        {/* Signals Table */}
         <div style={{ ...s.card, marginBottom: '20px', padding: '0', overflow: 'hidden' }}>
           <table style={s.table}>
             <thead>
               <tr>
-                <th style={s.th}>Keyword</th>
+                <th style={s.th}>Signal</th>
                 <th style={s.th}>Category</th>
-                <th style={s.th}>Trend Score</th>
-                <th style={s.th}>Volume Change</th>
-                <th style={s.th}>Last Updated</th>
+                <th style={s.th}>Relevance</th>
+                <th style={s.th}>Score</th>
+                <th style={s.th}>Tags</th>
+                <th style={s.th}>Last Seen</th>
                 <th style={s.th}></th>
               </tr>
             </thead>
             <tbody>
-              {filteredKeywords.length === 0 ? (
-                <tr><td colSpan={6} style={{ ...s.td, textAlign: 'center', padding: '32px', color: '#475569' }}>No keywords tracked. Add one to start monitoring trends.</td></tr>
-              ) : filteredKeywords.map(kw => (
-                <tr key={kw.id}>
-                  <td style={{ ...s.td, fontWeight: 600, color: '#F1F5F9' }}>{kw.keyword}</td>
-                  <td style={s.td}><span style={s.badge('#6366F1')}>{kw.category || 'General'}</span></td>
+              {signals.length === 0 ? (
+                <tr><td colSpan={7} style={{ ...s.td, textAlign: 'center', padding: '32px', color: '#475569' }}>No trend signals recorded. Add signals or run AI analysis to populate.</td></tr>
+              ) : signals.map(sig => (
+                <tr key={sig.id}>
+                  <td style={{ ...s.td, maxWidth: '280px' }}>
+                    <div style={{ fontWeight: 600, color: '#F1F5F9', fontSize: '13px' }}>{sig.title}</div>
+                    {sig.summary && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px' }}>{sig.summary}</div>}
+                  </td>
+                  <td style={s.td}><span style={s.badge('#6366F1')}>{sig.category || 'General'}</span></td>
+                  <td style={s.td}><span style={s.badge(RELEVANCE_COLOR[sig.relevance] || '#475569')}>{sig.relevance}</span></td>
                   <td style={s.td}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '80px', height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)' }}>
-                        <div style={s.progressBar(kw.trend_score)} />
+                      <div style={{ width: '60px', height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)' }}>
+                        <div style={s.progressBar(sig.score)} />
                       </div>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: kw.trend_score >= 70 ? '#10B981' : kw.trend_score >= 40 ? '#F59E0B' : '#EF4444' }}>{kw.trend_score}</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: sig.score >= 70 ? '#10B981' : sig.score >= 40 ? '#F59E0B' : '#EF4444' }}>{sig.score}</span>
                     </div>
                   </td>
                   <td style={s.td}>
-                    {kw.volume_change_pct != null ? (
-                      <span style={{ fontWeight: 600, color: kw.volume_change_pct > 0 ? '#10B981' : kw.volume_change_pct < 0 ? '#EF4444' : '#64748B' }}>
-                        {kw.volume_change_pct > 0 ? '+' : ''}{Number(kw.volume_change_pct).toFixed(1)}%
-                      </span>
-                    ) : <span style={{ color: '#334155' }}>--</span>}
+                    <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                      {(sig.tags || []).slice(0, 3).map((t, i) => (
+                        <span key={i} style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: 'rgba(99,102,241,0.08)', color: '#818CF8' }}>{t}</span>
+                      ))}
+                    </div>
                   </td>
-                  <td style={s.td}>{new Date(kw.last_updated).toLocaleDateString()}</td>
+                  <td style={s.td}>{new Date(sig.last_seen_at).toLocaleDateString()}</td>
                   <td style={s.td}>
-                    <button style={{ ...s.btnSm(false), color: '#EF4444', borderColor: '#EF444430' }} onClick={() => deleteItem('keyword', kw.id)}>Remove</button>
+                    <button style={{ ...s.btnSm(false), color: '#EF4444', borderColor: '#EF444430' }} onClick={() => deleteItem('signal', sig.id)}>Remove</button>
                   </td>
                 </tr>
               ))}
@@ -488,10 +507,37 @@ export default function MarketWatchPage() {
   /*  TAB 2 — Competitor Watch                                          */
   /* ------------------------------------------------------------------ */
   function CompetitorTab() {
+    const compAlerts = alerts.filter(a => a.alert_type === 'competitor')
+
     return (
       <div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: '#F1F5F9' }}>Competitor Intelligence</div>
+            <div style={{ fontSize: '12px', color: '#64748B' }}>Track competitors, analyze threats, and monitor market positioning</div>
+          </div>
           <button style={s.btn()} onClick={() => setShowCompForm(true)}>+ Add Competitor</button>
+        </div>
+
+        {/* Competitor KPIs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+          <div style={s.kpi}>
+            <div style={s.kpiValue}>{competitors.length}</div>
+            <div style={s.kpiLabel}>Tracked</div>
+          </div>
+          <div style={s.kpi}>
+            <div style={{ ...s.kpiValue, color: '#F59E0B' }}>{compAlerts.filter(a => !a.is_read).length}</div>
+            <div style={s.kpiLabel}>Active Alerts</div>
+          </div>
+          <div style={s.kpi}>
+            <div style={{ ...s.kpiValue, color: '#10B981' }}>{competitors.filter(c => c.last_checked_at && (Date.now() - new Date(c.last_checked_at).getTime()) < 7 * 86400000).length}</div>
+            <div style={s.kpiLabel}>Checked This Week</div>
+          </div>
+          <div style={s.kpi}>
+            <div style={{ ...s.kpiValue, color: '#8B5CF6' }}>{competitors.reduce((a, c) => a + (c.tracking_keywords?.length || 0), 0)}</div>
+            <div style={s.kpiLabel}>Keywords Tracked</div>
+          </div>
         </div>
 
         {competitors.length === 0 ? (
@@ -604,7 +650,7 @@ export default function MarketWatchPage() {
   /* ------------------------------------------------------------------ */
   /*  TAB 3 — Alerts                                                    */
   /* ------------------------------------------------------------------ */
-  function AlertsTab() {
+  function KeywordsTab() {
     const toggleSelect = (id: string) => {
       setSelectedAlerts(prev => {
         const next = new Set(prev)
@@ -612,64 +658,163 @@ export default function MarketWatchPage() {
         return next
       })
     }
-    const selectAll = () => setSelectedAlerts(new Set(filteredAlerts.map(a => a.id)))
+
+    // Keyword-related alerts
+    const kwAlerts = alerts.filter(a => a.alert_type === 'keyword')
 
     return (
       <div>
-        {/* Filters + Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Type:</span>
-            {['all', ...ALERT_TYPES].map(t => (
-              <button key={t} style={s.tab(alertTypeFilter === t)} onClick={() => setAlertTypeFilter(t)}>{t === 'all' ? 'All' : t}</button>
-            ))}
-            <span style={{ fontSize: '12px', color: '#64748B', marginLeft: '12px' }}>Severity:</span>
-            {['all', ...SEVERITIES].map(sv => (
-              <button key={sv} style={s.tab(alertSevFilter === sv)} onClick={() => setAlertSevFilter(sv)}>{sv === 'all' ? 'All' : sv}</button>
-            ))}
-            <span style={{ fontSize: '12px', color: '#64748B', marginLeft: '12px' }}>Status:</span>
-            {['all', 'unread', 'read'].map(r => (
-              <button key={r} style={s.tab(alertReadFilter === r)} onClick={() => setAlertReadFilter(r)}>{r === 'all' ? 'All' : r}</button>
-            ))}
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: '#F1F5F9' }}>Keyword Monitoring</div>
+            <div style={{ fontSize: '12px', color: '#64748B' }}>Track keywords, set alert thresholds, and monitor search volume trends</div>
           </div>
-          <button style={s.btn()} onClick={() => setShowAlertForm(true)}>+ Create Alert</button>
+          <button style={s.btn()} onClick={() => setShowKwForm(true)}>+ Add Keyword</button>
         </div>
 
-        {/* Bulk Actions */}
-        {selectedAlerts.size > 0 && (
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px', padding: '10px 16px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: '8px' }}>
-            <span style={{ fontSize: '12px', color: '#818CF8', fontWeight: 600 }}>{selectedAlerts.size} selected</span>
-            <button style={s.btnSm()} onClick={() => markAlertsRead(Array.from(selectedAlerts))}>Mark Read</button>
-            <button style={{ ...s.btnSm(false), color: '#EF4444', borderColor: '#EF444430' }} onClick={() => dismissAlerts(Array.from(selectedAlerts))}>Dismiss</button>
-            <button style={s.btnSm(false)} onClick={() => setSelectedAlerts(new Set())}>Deselect</button>
+        {/* KPI Bar */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
+          <div style={s.kpi}>
+            <div style={s.kpiValue}>{keywords.length}</div>
+            <div style={s.kpiLabel}>Keywords Tracked</div>
           </div>
-        )}
+          <div style={s.kpi}>
+            <div style={{ ...s.kpiValue, color: avgTrendScore >= 60 ? '#10B981' : avgTrendScore >= 40 ? '#F59E0B' : '#EF4444' }}>{avgTrendScore}</div>
+            <div style={s.kpiLabel}>Avg Trend Score</div>
+          </div>
+          <div style={s.kpi}>
+            <div style={{ ...s.kpiValue, color: '#10B981' }}>{keywords.filter(k => (k.volume_change_pct ?? 0) > 0).length}</div>
+            <div style={s.kpiLabel}>Trending Up</div>
+          </div>
+          <div style={s.kpi}>
+            <div style={{ ...s.kpiValue, color: '#F59E0B' }}>{kwAlerts.filter(a => !a.is_read).length}</div>
+            <div style={s.kpiLabel}>Active Alerts</div>
+          </div>
+        </div>
 
-        {/* Alerts List */}
-        {filteredAlerts.length === 0 ? (
-          <div style={{ ...s.card, ...s.empty }}>No alerts match the current filters.</div>
-        ) : (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-              <button style={s.btnSm(false)} onClick={selectAll}>Select All ({filteredAlerts.length})</button>
+        {/* Category Filters */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px' }}>
+          <span style={{ fontSize: '12px', color: '#64748B' }}>Category:</span>
+          {['all', ...KEYWORD_CATEGORIES].map(cat => (
+            <button key={cat} style={s.tab(kwCategoryFilter === cat)} onClick={() => setKwCategoryFilter(cat)}>
+              {cat === 'all' ? 'All' : cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Keyword Table */}
+        <div style={{ ...s.card, marginBottom: '20px', padding: '0', overflow: 'hidden' }}>
+          <table style={s.table}>
+            <thead>
+              <tr>
+                <th style={s.th}>Keyword</th>
+                <th style={s.th}>Category</th>
+                <th style={s.th}>Trend Score</th>
+                <th style={s.th}>Volume Change</th>
+                <th style={s.th}>Alert Status</th>
+                <th style={s.th}>Last Updated</th>
+                <th style={s.th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredKeywords.length === 0 ? (
+                <tr><td colSpan={7} style={{ ...s.td, textAlign: 'center', padding: '32px', color: '#475569' }}>No keywords tracked. Add one to start monitoring.</td></tr>
+              ) : filteredKeywords.map(kw => (
+                <tr key={kw.id}>
+                  <td style={{ ...s.td, fontWeight: 600, color: '#F1F5F9' }}>{kw.keyword}</td>
+                  <td style={s.td}><span style={s.badge('#6366F1')}>{kw.category || 'General'}</span></td>
+                  <td style={s.td}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '80px', height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)' }}>
+                        <div style={s.progressBar(kw.trend_score)} />
+                      </div>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: kw.trend_score >= 70 ? '#10B981' : kw.trend_score >= 40 ? '#F59E0B' : '#EF4444' }}>{kw.trend_score}</span>
+                    </div>
+                  </td>
+                  <td style={s.td}>
+                    {kw.volume_change_pct != null ? (
+                      <span style={{ fontWeight: 600, color: kw.volume_change_pct > 0 ? '#10B981' : kw.volume_change_pct < 0 ? '#EF4444' : '#64748B' }}>
+                        {kw.volume_change_pct > 0 ? '+' : ''}{Number(kw.volume_change_pct).toFixed(1)}%
+                      </span>
+                    ) : <span style={{ color: '#334155' }}>--</span>}
+                  </td>
+                  <td style={s.td}>
+                    {kw.trend_score >= 70 ? (
+                      <span style={s.badge('#10B981')}>Hot</span>
+                    ) : kw.trend_score >= 40 ? (
+                      <span style={s.badge('#F59E0B')}>Warm</span>
+                    ) : (
+                      <span style={s.badge('#475569')}>Normal</span>
+                    )}
+                  </td>
+                  <td style={s.td}>{new Date(kw.last_updated).toLocaleDateString()}</td>
+                  <td style={s.td}>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button style={s.btnSm(false)} onClick={() => {
+                        // Create a keyword alert
+                        fetch('/api/market-watch/alerts', {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ title: `Alert: ${kw.keyword} trend score ${kw.trend_score}`, description: `Keyword "${kw.keyword}" currently at trend score ${kw.trend_score}/100 with ${kw.volume_change_pct ?? 0}% volume change.`, alert_type: 'keyword', severity: kw.trend_score >= 70 ? 'warning' : 'info' }),
+                        }).then(() => load())
+                      }}>Alert</button>
+                      <button style={{ ...s.btnSm(false), color: '#EF4444', borderColor: '#EF444430' }} onClick={() => deleteItem('keyword', kw.id)}>Remove</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Keyword Alerts Section */}
+        <div style={{ ...s.card }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={s.cardTitle}>Keyword Alerts ({kwAlerts.length})</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {kwAlerts.filter(a => !a.is_read).length > 0 && (
+                <button style={s.btnSm(false)} onClick={() => markAlertsRead(kwAlerts.filter(a => !a.is_read).map(a => a.id))}>Mark All Read</button>
+              )}
+              <button style={s.btnSm()} onClick={() => setShowAlertForm(true)}>+ Manual Alert</button>
             </div>
+          </div>
+          {kwAlerts.length === 0 ? (
+            <div style={{ color: '#475569', fontSize: '12px', padding: '20px', textAlign: 'center' }}>No keyword alerts yet. Click "Alert" on a keyword row to create one, or add keywords with monitoring enabled.</div>
+          ) : (
             <div style={{ display: 'grid', gap: '8px' }}>
-              {filteredAlerts.map(alert => (
-                <div key={alert.id} style={{ ...s.card, padding: '14px 18px', opacity: alert.is_read ? 0.6 : 1, borderColor: alert.is_read ? 'rgba(255,255,255,0.04)' : SEVERITY_COLOR[alert.severity] + '30' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }}>
-                      <input type="checkbox" checked={selectedAlerts.has(alert.id)} onChange={() => toggleSelect(alert.id)} style={{ cursor: 'pointer' }} />
-                      <span style={{ fontSize: '11px', color: '#475569' }}>{new Date(alert.created_at).toLocaleString()}</span>
-                      <span style={s.badge(ALERT_TYPE_COLOR[alert.alert_type] || '#475569')}>{alert.alert_type}</span>
-                      <span style={{ fontSize: '14px', fontWeight: 600, color: '#F1F5F9' }}>{alert.title}</span>
-                      <span style={s.badge(SEVERITY_COLOR[alert.severity] || '#475569')}>{alert.severity}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                      {!alert.is_read && <button style={s.btnSm(false)} onClick={() => markAlertsRead([alert.id])}>Mark Read</button>}
-                      <button style={{ ...s.btnSm(false), color: '#EF4444', borderColor: '#EF444430' }} onClick={() => dismissAlerts([alert.id])}>Dismiss</button>
-                    </div>
+              {kwAlerts.slice(0, 15).map(alert => (
+                <div key={alert.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', opacity: alert.is_read ? 0.5 : 1 }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flex: 1 }}>
+                    <span style={s.badge(SEVERITY_COLOR[alert.severity] || '#475569')}>{alert.severity}</span>
+                    <span style={{ fontSize: '13px', color: '#F1F5F9', fontWeight: 600 }}>{alert.title}</span>
+                    <span style={{ fontSize: '11px', color: '#475569' }}>{new Date(alert.created_at).toLocaleDateString()}</span>
                   </div>
-                  {alert.description && <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px', marginLeft: '28px' }}>{alert.description}</div>}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {!alert.is_read && <button style={s.btnSm(false)} onClick={() => markAlertsRead([alert.id])}>Read</button>}
+                    <button style={{ ...s.btnSm(false), color: '#EF4444', borderColor: '#EF444430' }} onClick={() => dismissAlerts([alert.id])}>Dismiss</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* All Alerts Section (non-keyword) */}
+        {alerts.filter(a => a.alert_type !== 'keyword').length > 0 && (
+          <div style={{ ...s.card, marginTop: '20px' }}>
+            <div style={s.cardTitle}>Other Market Alerts ({alerts.filter(a => a.alert_type !== 'keyword').length})</div>
+            <div style={{ display: 'grid', gap: '6px' }}>
+              {alerts.filter(a => a.alert_type !== 'keyword').slice(0, 10).map(alert => (
+                <div key={alert.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', opacity: alert.is_read ? 0.5 : 1 }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
+                    <span style={s.badge(ALERT_TYPE_COLOR[alert.alert_type] || '#475569')}>{alert.alert_type}</span>
+                    <span style={{ fontSize: '13px', color: '#CBD5E1' }}>{alert.title}</span>
+                    <span style={s.badge(SEVERITY_COLOR[alert.severity] || '#475569')}>{alert.severity}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {!alert.is_read && <button style={s.btnSm(false)} onClick={() => markAlertsRead([alert.id])}>Read</button>}
+                    <button style={{ ...s.btnSm(false), color: '#EF4444', borderColor: '#EF444430' }} onClick={() => dismissAlerts([alert.id])}>Dismiss</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -864,15 +1009,20 @@ export default function MarketWatchPage() {
       {/* Tabs */}
       <div style={s.tabs}>
         {TABS.map((t, i) => (
-          <button key={t} style={s.tab(tab === i)} onClick={() => setTab(i)}>{t}</button>
+          <button key={t} style={{ ...s.tab(tab === i), display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setTab(i)}>
+            {t}
+            {i === 3 && unreadAlerts.length > 0 && (
+              <span style={{ fontSize: '10px', fontWeight: 700, background: '#EF4444', color: '#fff', borderRadius: '999px', padding: '1px 6px', lineHeight: '14px' }}>{unreadAlerts.length}</span>
+            )}
+          </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      {tab === 0 && <DashboardTab />}
-      {tab === 1 && <TrendAnalysisTab />}
+      {tab === 0 && <OverviewTab />}
+      {tab === 1 && <TrendsTab />}
       {tab === 2 && <CompetitorTab />}
-      {tab === 3 && <AlertsTab />}
+      {tab === 3 && <KeywordsTab />}
       {tab === 4 && <ReportsTab />}
 
       {/* ------ MODALS ------ */}
@@ -930,7 +1080,10 @@ export default function MarketWatchPage() {
             <label style={s.label}>Tracking Keywords (comma-separated)</label>
             <input style={s.input} placeholder="keyword1, keyword2, keyword3" value={compForm.tracking_keywords} onChange={e => setCompForm(f => ({ ...f, tracking_keywords: e.target.value }))} />
             <label style={s.label}>Notes</label>
-            <textarea style={s.textarea} placeholder="Additional notes about this competitor..." value={compForm.notes} onChange={e => setCompForm(f => ({ ...f, notes: e.target.value }))} />
+            <textarea style={s.textarea} placeholder="What do you know about this competitor? Their strengths, weaknesses, market approach..." value={compForm.notes} onChange={e => setCompForm(f => ({ ...f, notes: e.target.value }))} />
+            <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.1)', borderRadius: '8px', padding: '12px', marginBottom: '14px' }}>
+              <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '8px' }}>After adding, use "AI Analyze" to generate a competitive analysis including strengths, weaknesses, threats, and recommended actions.</div>
+            </div>
             <div style={s.formActions}>
               <button style={s.btn(false)} onClick={() => setShowCompForm(false)}>Cancel</button>
               <button style={s.btn()} onClick={addCompetitor} disabled={saving}>{saving ? 'Saving...' : 'Add Competitor'}</button>
@@ -943,13 +1096,44 @@ export default function MarketWatchPage() {
       {showKwForm && (
         <div style={s.modal} onClick={e => e.target === e.currentTarget && setShowKwForm(false)}>
           <div style={s.modalCard}>
-            <div style={{ fontSize: '16px', fontWeight: 800, color: '#F1F5F9', marginBottom: '24px' }}>Add Keyword</div>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: '#F1F5F9', marginBottom: '24px' }}>Add Keyword to Monitor</div>
             <label style={s.label}>Keyword *</label>
             <input style={s.input} placeholder="e.g. smart building automation" value={kwForm.keyword} onChange={e => setKwForm(f => ({ ...f, keyword: e.target.value }))} />
             <label style={s.label}>Category</label>
             <select style={s.input} value={kwForm.category} onChange={e => setKwForm(f => ({ ...f, category: e.target.value }))}>
               {KEYWORD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+
+            {/* Alert Configuration */}
+            <div style={{ background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.1)', borderRadius: '8px', padding: '16px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <input type="checkbox" id="alert_enabled" checked={kwForm.alert_enabled}
+                  onChange={e => setKwForm(f => ({ ...f, alert_enabled: e.target.checked }))} />
+                <label htmlFor="alert_enabled" style={{ fontSize: '13px', color: '#F1F5F9', fontWeight: 600, cursor: 'pointer' }}>Enable Alert Monitoring</label>
+              </div>
+              {kwForm.alert_enabled && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={s.label}>Alert When Score Exceeds</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input style={{ ...s.input, marginBottom: 0 }} type="number" min="0" max="100"
+                        value={kwForm.alert_threshold} onChange={e => setKwForm(f => ({ ...f, alert_threshold: Number(e.target.value) }))} />
+                      <span style={{ fontSize: '12px', color: '#64748B' }}>/100</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={s.label}>Alert Frequency</label>
+                    <select style={{ ...s.input, marginBottom: 0 }} value={kwForm.alert_frequency}
+                      onChange={e => setKwForm(f => ({ ...f, alert_frequency: e.target.value }))}>
+                      <option value="immediate">Immediate</option>
+                      <option value="daily">Daily Digest</option>
+                      <option value="weekly">Weekly Summary</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={s.formActions}>
               <button style={s.btn(false)} onClick={() => setShowKwForm(false)}>Cancel</button>
               <button style={s.btn()} onClick={addKeyword} disabled={saving}>{saving ? 'Saving...' : 'Add Keyword'}</button>

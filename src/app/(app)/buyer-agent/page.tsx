@@ -21,18 +21,28 @@ type Match = {
 }
 
 /* ── Constants ── */
-const CATEGORIES = ['property', 'vehicle', 'equipment', 'services', 'technology', 'materials', 'other']
-const CAT_ICONS: Record<string, string> = {
-  property: '\u{1F3E0}', vehicle: '\u{1F697}', equipment: '\u2699\uFE0F', services: '\u{1F6E0}\uFE0F',
-  technology: '\u{1F4BB}', materials: '\u{1F4E6}', other: '\u{1F50D}'
+const CATEGORIES = ['vehicles', 'real_estate', 'equipment', 'electronics', 'musical_instruments', 'services', 'general']
+const CAT_LABELS: Record<string, string> = {
+  vehicles: 'Vehicles', real_estate: 'Real Estate', equipment: 'Equipment',
+  electronics: 'Electronics', musical_instruments: 'Musical Instruments',
+  services: 'Services', general: 'General',
 }
-const SOURCES = ['marketplace', 'listings', 'inventory', 'custom']
+const CAT_ICONS: Record<string, string> = {
+  vehicles: '\u{1F697}', real_estate: '\u{1F3E0}', equipment: '\u2699\uFE0F',
+  electronics: '\u{1F4BB}', musical_instruments: '\u{1F3B8}',
+  services: '\u{1F6E0}\uFE0F', general: '\u{1F50D}',
+  // Legacy mapping
+  property: '\u{1F3E0}', vehicle: '\u{1F697}', technology: '\u{1F4BB}',
+  materials: '\u{1F4E6}', other: '\u{1F50D}',
+}
+const SOURCES = ['marketplace', 'listings', 'inventory', 'auction', 'dealer', 'custom']
 const SCHEDULES = ['continuous', 'hourly', 'daily', 'weekly']
 const ALERT_FREQ = ['immediate', 'daily', 'weekly']
 
 const blank = {
   name: '', category: 'equipment', description: '',
   budget_min: '', budget_max: '', location: '',
+  keywords: '',
   requirements: [{ key: '', value: '' }],
   search_sources: ['marketplace', 'listings', 'inventory'],
   alert_email: '', schedule: 'daily', alert_frequency: 'daily',
@@ -102,12 +112,17 @@ export default function BuyerAgentPage() {
   /* ── Actions ── */
   async function handleSave() {
     setSaving(true)
+    // Store keywords in requirements as a special entry
+    const reqs = form.requirements.filter(r => r.key && r.value)
+    if (form.keywords.trim()) {
+      reqs.push({ key: '_keywords', value: form.keywords.trim() })
+    }
     const payload: any = {
       name: form.name, category: form.category, description: form.description || null,
       budget_min: form.budget_min ? Number(form.budget_min) : null,
       budget_max: form.budget_max ? Number(form.budget_max) : null,
       location: form.location || null,
-      requirements: form.requirements.filter(r => r.key && r.value),
+      requirements: reqs,
       search_sources: form.search_sources,
       alert_email: form.alert_email || null,
       schedule: form.schedule,
@@ -125,11 +140,15 @@ export default function BuyerAgentPage() {
 
   function openEdit(c: Config) {
     setEditId(c.id)
+    // Extract keywords from requirements if stored there
+    const kwReq = c.requirements?.find((r: any) => r.key === '_keywords')
+    const kwStr = kwReq ? kwReq.value : ''
     setForm({
       name: c.name, category: c.category, description: c.description || '',
       budget_min: c.budget_min?.toString() || '', budget_max: c.budget_max?.toString() || '',
       location: c.location || '',
-      requirements: c.requirements?.length ? c.requirements : [{ key: '', value: '' }],
+      keywords: kwStr,
+      requirements: (c.requirements || []).filter((r: any) => r.key !== '_keywords').length ? (c.requirements || []).filter((r: any) => r.key !== '_keywords') : [{ key: '', value: '' }],
       search_sources: c.search_sources || ['marketplace', 'listings', 'inventory'],
       alert_email: c.alert_email || '', schedule: c.schedule || 'daily',
       alert_frequency: 'daily', auto_follow_up: c.auto_follow_up,
@@ -279,7 +298,7 @@ export default function BuyerAgentPage() {
                   <div style={{ fontSize: '14px', fontWeight: 600, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {CAT_ICONS[c.category] || '\u{1F50D}'} {c.name}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#6366F1', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>{c.category}</div>
+                  <div style={{ fontSize: '11px', color: '#6366F1', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>{CAT_LABELS[c.category] || c.category}</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {c.match_count > 0 && (
@@ -460,13 +479,24 @@ export default function BuyerAgentPage() {
                     {CAT_ICONS[activeConfig.category] || '\u{1F50D}'} {activeConfig.name}
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-                    {activeConfig.description || 'No description'}
+                    <span style={{ color: '#818CF8', fontWeight: 600 }}>{CAT_LABELS[activeConfig.category] || activeConfig.category}</span>
+                    {activeConfig.description && ` \u00B7 ${activeConfig.description}`}
                     {activeConfig.location && ` \u00B7 ${activeConfig.location}`}
                     {(activeConfig.budget_min || activeConfig.budget_max) && ` \u00B7 $${activeConfig.budget_min?.toLocaleString() || '0'} - $${activeConfig.budget_max?.toLocaleString() || '\u221E'}`}
                   </div>
-                  {activeConfig.requirements?.length > 0 && (
+                  {/* Show keywords if stored */}
+                  {activeConfig.requirements?.some((r: any) => r.key === '_keywords') && (
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
+                      {activeConfig.requirements.find((r: any) => r.key === '_keywords')?.value.split(',').map((kw: string, i: number) => (
+                        <span key={i} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(16,185,129,0.1)', color: '#10B981', fontWeight: 600 }}>
+                          {kw.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {activeConfig.requirements?.filter((r: any) => r.key !== '_keywords').length > 0 && (
                     <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-                      {activeConfig.requirements.map((r, i) => (
+                      {activeConfig.requirements.filter((r: any) => r.key !== '_keywords').map((r: any, i: number) => (
                         <span key={i} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(99,102,241,0.1)', color: '#818CF8' }}>
                           {r.key}: {r.value}
                         </span>
@@ -647,8 +677,16 @@ export default function BuyerAgentPage() {
             {/* Category */}
             <label style={s.label}>Category</label>
             <select style={s.select} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-              {CATEGORIES.map(c => <option key={c} value={c}>{CAT_ICONS[c]} {c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+              {CATEGORIES.map(c => <option key={c} value={c}>{CAT_ICONS[c]} {CAT_LABELS[c] || c}</option>)}
             </select>
+
+            {/* Keywords */}
+            <label style={s.label}>Search Keywords (comma-separated)</label>
+            <input style={s.input} placeholder="e.g. Toyota Tacoma, 4x4, low mileage, crew cab"
+              value={form.keywords} onChange={e => setForm(f => ({ ...f, keywords: e.target.value }))} />
+            <div style={{ fontSize: '10px', color: '#475569', marginTop: '-8px', marginBottom: '12px' }}>
+              These keywords help the AI agent find better matches
+            </div>
 
             {/* Description */}
             <label style={s.label}>Detailed Search Criteria</label>

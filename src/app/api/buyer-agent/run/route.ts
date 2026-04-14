@@ -39,9 +39,23 @@ export async function POST(req: NextRequest) {
     if (cfgErr || !config) return NextResponse.json({ error: 'Config not found' }, { status: 404 })
 
     // Build the search prompt
-    const requirements = (config.requirements || [])
+    const allReqs = config.requirements || []
+    const keywordsReq = allReqs.find((r: any) => r.key === '_keywords')
+    const keywords = keywordsReq ? keywordsReq.value : ''
+    const requirements = allReqs
+      .filter((r: { key: string; value: string }) => r.key !== '_keywords' && r.key && r.value)
       .map((r: { key: string; value: string }) => `- ${r.key}: ${r.value}`)
       .join('\n')
+
+    const categoryLabels: Record<string, string> = {
+      vehicles: 'Vehicles (cars, trucks, motorcycles, boats, RVs)',
+      real_estate: 'Real Estate (homes, commercial, land, rentals)',
+      equipment: 'Equipment (heavy machinery, tools, industrial)',
+      electronics: 'Electronics (computers, phones, audio/video, components)',
+      musical_instruments: 'Musical Instruments (guitars, keyboards, drums, pro audio)',
+      services: 'Services (contractors, consulting, professional services)',
+      general: 'General Marketplace',
+    }
 
     const sources = (config.search_sources || ['marketplace', 'listings', 'inventory']).join(', ')
 
@@ -49,8 +63,9 @@ export async function POST(req: NextRequest) {
 
 Search Criteria:
 - Looking for: ${config.name}
-- Category: ${config.category}
+- Category: ${categoryLabels[config.category] || config.category}
 - Description: ${config.description || 'No additional description'}
+${keywords ? `- Search Keywords: ${keywords}` : ''}
 - Budget Range: $${config.budget_min || 0} - $${config.budget_max || 'unlimited'}
 - Location Preference: ${config.location || 'Any'}
 - Search Sources: ${sources}
