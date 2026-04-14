@@ -56,6 +56,9 @@ export default function LoginPage() {
         </form>
 
         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: '#475569' }}>
+          <Link href="/forgot-password" style={{ color: '#6366F1', fontWeight: 600 }}>Forgot your password?</Link>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '13px', color: '#475569' }}>
           Don&apos;t have an account?{' '}
           <Link href="/signup" style={{ color: '#6366F1', fontWeight: 600 }}>Create one</Link>
         </div>
